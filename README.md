@@ -29,7 +29,7 @@ This project follows a standard MCP server structure.
 ### Groq API Key
 
 1. Obtain a Groq API key and set it as `GROQ_API_KEY` (see env example).
-2. Optional: Set `GROQ_MODEL` (default: `llama-3.1-70b-versatile`) and `USER_AGENT`.
+2. Optional: Set `GROQ_MODEL` (default: `llama-3.1-8b-instant`, with automatic fallback to `openai/gpt-oss-20b`) and `USER_AGENT`.
 
 Create a local `.env` (or export env vars) based on `env.example`.
 
@@ -45,7 +45,7 @@ Add this to your configuration:
       "args": ["-y", "@modelcontextprotocol/server-historic-price"],
       "env": {
         "GROQ_API_KEY": "YOUR_API_KEY_HERE",
-        "GROQ_MODEL": "llama-3.1-70b-versatile"
+        "GROQ_MODEL": "llama-3.1-8b-instant"
       }
     }
   }
@@ -60,7 +60,7 @@ Build and run:
 docker build -t mcp/historic-price:latest .
 docker run -i --rm \
   -e GROQ_API_KEY="$GROQ_API_KEY" \
-  -e GROQ_MODEL="llama-3.1-70b-versatile" \
+  -e GROQ_MODEL="llama-3.1-8b-instant" \
   mcp/historic-price:latest
 ```
 

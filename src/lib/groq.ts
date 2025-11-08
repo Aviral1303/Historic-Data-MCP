@@ -18,7 +18,8 @@ export async function groqSuggestUrls(params: {
 }): Promise<GroqUrlSuggestion[]> {
   const apiKey = getEnv("GROQ_API_KEY");
   const max = Math.min(Math.max(params.max ?? 10, 1), 20);
-  const model = process.env.GROQ_MODEL ?? "llama-3.1-70b-versatile";
+  const modelPrimary = process.env.GROQ_MODEL ?? "llama-3.1-8b-instant";
+  const modelFallback = "openai/gpt-oss-20b";
 
   const system = [
     "You help find URLs that likely contain historical price trends for a product/category.",
@@ -32,29 +33,36 @@ export async function groqSuggestUrls(params: {
 
   const user = `Query: ${params.query}\nReturn up to ${max} results.`;
 
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "User-Agent": USER_AGENT()
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ],
-      temperature: 0.3,
-      response_format: { type: "json_object" }
-    })
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Groq API error: ${res.status} ${res.statusText} ${body}`);
+  async function callModel(model: string): Promise<GroqChatResponse> {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "User-Agent": USER_AGENT()
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user }
+        ],
+        temperature: 0.3,
+        response_format: { type: "json_object" }
+      })
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      // If model is decommissioned or invalid, try fallback once
+      if (/decommissioned|no longer supported|invalid model/i.test(body) && model !== modelFallback) {
+        return await callModel(modelFallback);
+      }
+      throw new Error(`Groq API error: ${res.status} ${res.statusText} ${body}`);
+    }
+    return (await res.json()) as GroqChatResponse;
   }
-  const data = (await res.json()) as GroqChatResponse;
+
+  const data = await callModel(modelPrimary);
   const content = data.choices?.[0]?.message?.content ?? "";
   try {
     const parsed = JSON.parse(content) as { results?: GroqUrlSuggestion[] };
@@ -81,7 +89,8 @@ export async function groqAnalyzeSentiment(params: {
   topic: string;
 }): Promise<GroqSentiment> {
   const apiKey = getEnv("GROQ_API_KEY");
-  const model = process.env.GROQ_MODEL ?? "llama-3.1-8b-instant";
+  const modelPrimary = process.env.GROQ_MODEL ?? "llama-3.1-8b-instant";
+  const modelFallback = "openai/gpt-oss-20b";
   const system = [
     "You are a market analyst. Analyze public sentiment regarding demand for the given topic.",
     "Return strictly a JSON object with fields:",
@@ -91,28 +100,34 @@ export async function groqAnalyzeSentiment(params: {
     "\"summary\": string, \"sources\": [{\"url\": string, \"note\"?: string}] (optional) }"
   ].join(" ");
   const user = `Topic: ${params.topic}\nBe concise but complete.`;
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "User-Agent": USER_AGENT()
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ],
-      temperature: 0.2,
-      response_format: { type: "json_object" }
-    })
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Groq API error: ${res.status} ${res.statusText} ${body}`);
+  async function callModel(model: string): Promise<GroqChatResponse> {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "User-Agent": USER_AGENT()
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user }
+        ],
+        temperature: 0.2,
+        response_format: { type: "json_object" }
+      })
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      if (/decommissioned|no longer supported|invalid model/i.test(body) && model !== modelFallback) {
+        return await callModel(modelFallback);
+      }
+      throw new Error(`Groq API error: ${res.status} ${res.statusText} ${body}`);
+    }
+    return (await res.json()) as GroqChatResponse;
   }
-  const data = (await res.json()) as GroqChatResponse;
+  const data = await callModel(modelPrimary);
   const content = data.choices?.[0]?.message?.content ?? "{}";
   const parsed = JSON.parse(content) as GroqSentiment;
   return parsed;
