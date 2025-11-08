@@ -134,67 +134,69 @@ mcp.registerTool(
 );
 
 // Connect transport: prefer HTTP if requested (for dedalus-labs deployment)
-const useHttp = process.env.MCP_HTTP === "1" || !!process.env.PORT;
-if (useHttp) {
-  const port = Number(process.env.PORT ?? 3000);
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true
-  });
-  await mcp.connect(transport);
-  // Minimal HTTP server that routes /mcp to the transport and serves a health check
-  const server = http.createServer(async (req, res) => {
-    try {
-      const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-      if (url.pathname === "/healthz") {
-        res.statusCode = 200;
-        res.setHeader("content-type", "text/plain");
-        res.end("ok");
-        return;
-      }
-      if (url.pathname === "/mcp" || url.pathname === "/") {
-        let parsedBody: unknown = undefined;
-        if (req.method === "POST") {
-          // Collect body for JSON POST
-          const chunks: Buffer[] = [];
-          await new Promise<void>((resolve, reject) => {
-            req.on("data", (c) => chunks.push(Buffer.from(c)));
-            req.on("end", () => resolve());
-            req.on("error", reject);
-          });
-          const raw = Buffer.concat(chunks).toString("utf8");
-          const ct = (req.headers["content-type"] ?? "").toString();
-          if (ct.includes("application/json") && raw) {
-            try {
-              parsedBody = JSON.parse(raw);
-            } catch {
-              // fallthrough; transport will handle error
-              parsedBody = undefined;
+void (async () => {
+  const useHttp = process.env.MCP_HTTP === "1" || !!process.env.PORT;
+  if (useHttp) {
+    const port = Number(process.env.PORT ?? 3000);
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true
+    });
+    await mcp.connect(transport);
+    // Minimal HTTP server that routes /mcp to the transport and serves a health check
+    const server = http.createServer(async (req, res) => {
+      try {
+        const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+        if (url.pathname === "/healthz") {
+          res.statusCode = 200;
+          res.setHeader("content-type", "text/plain");
+          res.end("ok");
+          return;
+        }
+        if (url.pathname === "/mcp" || url.pathname === "/") {
+          let parsedBody: unknown = undefined;
+          if (req.method === "POST") {
+            // Collect body for JSON POST
+            const chunks: Buffer[] = [];
+            await new Promise<void>((resolve, reject) => {
+              req.on("data", (c) => chunks.push(Buffer.from(c)));
+              req.on("end", () => resolve());
+              req.on("error", reject);
+            });
+            const raw = Buffer.concat(chunks).toString("utf8");
+            const ct = (req.headers["content-type"] ?? "").toString();
+            if (ct.includes("application/json") && raw) {
+              try {
+                parsedBody = JSON.parse(raw);
+              } catch {
+                // fallthrough; transport will handle error
+                parsedBody = undefined;
+              }
             }
           }
+          // Ensure Accept header includes both types expected by transport
+          const accept = (req.headers["accept"] ?? "").toString();
+          const neededJson = "application/json";
+          const neededSse = "text/event-stream";
+          if (!accept.includes(neededJson) || !accept.includes(neededSse)) {
+            req.headers["accept"] = [neededJson, neededSse].join(", ");
+          }
+          await transport.handleRequest(req as any, res as any, parsedBody);
+          return;
         }
-        // Ensure Accept header includes both types expected by transport
-        const accept = (req.headers["accept"] ?? "").toString();
-        const neededJson = "application/json";
-        const neededSse = "text/event-stream";
-        if (!accept.includes(neededJson) || !accept.includes(neededSse)) {
-          req.headers["accept"] = [neededJson, neededSse].join(", ");
-        }
-        await transport.handleRequest(req as any, res as any, parsedBody);
-        return;
+        res.statusCode = 404;
+        res.end("Not Found");
+      } catch (err) {
+        res.statusCode = 500;
+        res.end("Internal Server Error");
       }
-      res.statusCode = 404;
-      res.end("Not Found");
-    } catch (err) {
-      res.statusCode = 500;
-      res.end("Internal Server Error");
-    }
-  });
-  server.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`MCP Streamable HTTP server listening on :${port}`);
-  });
-} else {
-  await mcp.connect(new StdioServerTransport());
-}
+    });
+    server.listen(port, () => {
+      // eslint-disable-next-line no-console
+      console.log(`MCP Streamable HTTP server listening on :${port}`);
+    });
+  } else {
+    await mcp.connect(new StdioServerTransport());
+  }
+})();
 
