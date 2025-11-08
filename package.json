@@ -1,0 +1,32 @@
+{
+  "name": "@modelcontextprotocol/server-historic-price",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "MCP server that discovers historic price trends for user-specified products via web search and scraping.",
+  "bin": {
+    "server-historic-price": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "check": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT",
+  "author": "dedalus-labs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.1.1",
+    "cheerio": "^1.0.0",
+    "p-limit": "^5.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.3"
+  }
+}
