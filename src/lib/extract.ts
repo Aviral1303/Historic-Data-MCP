@@ -5,8 +5,8 @@ const currencyCodes = ["USD", "EUR", "GBP", "INR", "JPY", "AUD", "CAD", "KRW"];
 
 const priceRegex = new RegExp(
   [
-    `(?:${currencySymbols.map(s => escapeRegex(s)).join("|")})\\s?\\d{1,3}(?:[\\,\\.\\s]\\d{3})*(?:[\\.,]\\d{1,2})?`,
-    `\\d{1,3}(?:[\\,\\.\\s]\\d{3})*(?:[\\.,]\\d{1,2})?\\s?(?:${currencyCodes.join("|")})`
+    `(?:${currencySymbols.map(s => escapeRegex(s)).join("|")})\\s?\\d+(?:[\\.,]\\d+)?`,
+    `\\d+(?:[\\.,]\\d+)?\\s?(?:${currencyCodes.join("|")})`
   ].join("|"),
   "gi"
 );
@@ -93,14 +93,39 @@ function firstDateFrom(text: string): string | undefined {
 }
 
 export function extractFromSnippet(snippet: string, base: { url: string; title?: string }): PricePoint[] {
-  const prices = [...snippet.matchAll(priceRegex)].map(m => m[0]);
-  const date = firstDateFrom(snippet);
+  const pricesMatches = [...snippet.matchAll(priceRegex)];
+  if (pricesMatches.length === 0) return [];
+  const globalDates = [...snippet.matchAll(monthYearRegex)]
+    .map(m => ({ index: m.index ?? 0, text: m[0] }))
+    .concat([...snippet.matchAll(yearRegex)].map(m => ({ index: m.index ?? 0, text: m[0] })));
+  const windowSize = 80;
   const points: PricePoint[] = [];
-  for (const raw of prices) {
+  for (const m of pricesMatches) {
+    const raw = m[0];
     const parsed = parsePrice(raw);
     if (!parsed) continue;
+    const center = m.index ?? 0;
+    // Find nearest date mention around the price
+    let chosenDate: string | undefined;
+    let bestDist = Infinity;
+    for (const d of globalDates) {
+      const dist = Math.abs((d.index ?? 0) - center);
+      if (dist <= windowSize && dist < bestDist) {
+        const dt = firstDateFrom(d.text);
+        if (dt) {
+          chosenDate = dt;
+          bestDist = dist;
+        }
+      }
+    }
+    // Fallback to first date anywhere, else today
+    if (!chosenDate) {
+      chosenDate = firstDateFrom(snippet) ?? new Date().toISOString().slice(0, 10);
+    }
+    // Filter unrealistic prices
+    if (parsed.price <= 0 || parsed.price > 1_000_000) continue;
     points.push({
-      date: date ?? new Date().toISOString().slice(0, 10),
+      date: chosenDate,
       price: parsed.price,
       currency: parsed.currency,
       sourceUrl: base.url,

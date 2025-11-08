@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildTrend } from "./lib/extract.js";
 import { scrapePricesFromUrl } from "./lib/scrape.js";
 import { z } from "zod";
@@ -130,6 +131,12 @@ mcp.registerTool(
   }
 );
 
-// Connect to stdio transport
-await mcp.connect(new StdioServerTransport());
+// Connect transport: prefer HTTP if requested (for dedalus-labs deployment)
+const useHttp = process.env.MCP_HTTP === "1" || !!process.env.PORT;
+if (useHttp) {
+  const port = Number(process.env.PORT ?? 3000);
+  await mcp.connect(new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true }));
+} else {
+  await mcp.connect(new StdioServerTransport());
+}
 

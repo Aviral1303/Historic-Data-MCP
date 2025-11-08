@@ -15,4 +15,5 @@ export const GROQ_MAX_CONCURRENCY = () => {
   const n = raw ? Number.parseInt(raw, 10) : 2;
   return Number.isFinite(n) && n > 0 ? n : 2;
 };
+export const USE_JINA_READER = () => process.env.USE_JINA_READER === "1";
 

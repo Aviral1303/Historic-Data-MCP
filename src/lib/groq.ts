@@ -24,8 +24,10 @@ export async function groqSuggestUrls(params: {
     "You help find URLs that likely contain historical price trends for a product/category.",
     "Return strict JSON only, no extra text.",
     "JSON shape: {\"results\":[{\"url\":\"...\",\"title\":\"...\",\"rationale\":\"...\"}]}",
-    "Prefer pages with explicit price history over years/months, reputable sources, news analyses, blogs with charts.",
-    "Avoid irrelevant pages; no login walls when possible."
+    "Prefer pages with explicit year-by-year prices, charts, or 'price history' tables.",
+    "Good keywords: 'price history', 'historical price', 'by year', 'chart', 'average ticket price by year'.",
+    "Avoid paywalled or login-only sources like Statista, Ticketmaster account-only, Songkick sign-in pages.",
+    "Prefer extractable sources like CNET, MacRumors, The Verge, Tom's Hardware, Macworld, Investopedia, KBB, PriceCharting, manufacturer and reputable blogs."
   ].join(" ");
 
   const user = `Query: ${params.query}\nReturn up to ${max} results.`;
