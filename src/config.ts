@@ -6,8 +6,6 @@ export function getEnv(name: string, fallback?: string): string {
   return value;
 }
 
-export const BRAVE_API_KEY = () => getEnv("BRAVE_API_KEY");
-export const DEFAULT_COUNTRY = () => process.env.DEFAULT_COUNTRY ?? "US";
 export const USER_AGENT = () =>
   process.env.USER_AGENT ?? "HistoricPriceMCP/0.1 (+https://github.com/dedalus-labs)";
 export const GROQ_MAX_CONCURRENCY = () => {
