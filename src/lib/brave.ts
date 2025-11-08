@@ -59,4 +59,3 @@ export async function braveWebSearch(params: {
       description: r.description
     }));
 }
-
