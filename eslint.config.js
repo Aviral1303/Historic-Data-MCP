@@ -1,4 +1,7 @@
 // Flat config for ESLint v9+
+import tsParser from "@typescript-eslint/parser";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
+
 export default [
   {
     ignores: [
@@ -22,10 +25,10 @@ export default [
         module: "readonly",
         require: "readonly"
       },
-      parser: await import("@typescript-eslint/parser").then(m => m.default)
+      parser: tsParser
     },
     plugins: {
-      "@typescript-eslint": await import("@typescript-eslint/eslint-plugin").then(m => m.default || m)
+      "@typescript-eslint": tsPlugin
     },
     rules: {
       "no-console": "off",
