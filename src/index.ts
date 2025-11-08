@@ -152,7 +152,7 @@ if (useHttp) {
         res.end("ok");
         return;
       }
-      if (url.pathname === "/mcp") {
+      if (url.pathname === "/mcp" || url.pathname === "/") {
         let parsedBody: unknown = undefined;
         if (req.method === "POST") {
           // Collect body for JSON POST
@@ -172,6 +172,13 @@ if (useHttp) {
               parsedBody = undefined;
             }
           }
+        }
+        // Ensure Accept header includes both types expected by transport
+        const accept = (req.headers["accept"] ?? "").toString();
+        const neededJson = "application/json";
+        const neededSse = "text/event-stream";
+        if (!accept.includes(neededJson) || !accept.includes(neededSse)) {
+          req.headers["accept"] = [neededJson, neededSse].join(", ");
         }
         await transport.handleRequest(req as any, res as any, parsedBody);
         return;
