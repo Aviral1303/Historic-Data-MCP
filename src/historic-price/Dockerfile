@@ -16,14 +16,15 @@ RUN pnpm build
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production \
-    USER_AGENT="HistoricPriceMCP/0.1 (+https://github.com/dedalus-labs)" \
-    MCP_HTTP=1 \
+    USER_AGENT="HistoricPriceMCP/0.1 (+https://github.com/dedalus-labs)"
+ENV MCP_HTTP=1 \
     PORT=3000
 EXPOSE 3000
 COPY --from=base /app/dist ./dist
 COPY --from=base /app/package.json ./package.json
 RUN corepack enable && corepack prepare pnpm@9.12.3 --activate && pnpm i --prod --no-optional || true
 
-# Stdio transport
+# Default to stdio; platform can set MCP_HTTP=1 and PORT for HTTP
 CMD ["node", "dist/index.js"]
+
 

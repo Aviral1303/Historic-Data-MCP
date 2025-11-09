@@ -7,7 +7,7 @@ import { buildTrend } from "./lib/extract.js";
 import { scrapePricesFromUrl } from "./lib/scrape.js";
 import { z } from "zod";
 import type { PricePoint, TrendResult } from "./types.js";
-import { groqSuggestUrls, groqAnalyzeSentiment } from "./lib/groq.js";
+import { groqSuggestUrls, groqAnalyzeSentiment, groqExtractSeries } from "./lib/groq.js";
 import pLimit from "p-limit";
 import { GROQ_MAX_CONCURRENCY } from "./config.js";
 
@@ -65,23 +65,49 @@ mcp.registerTool(
   async (args) => {
     const { query, maxResults = 20 } = args;
     const maxSites = Math.min(maxResults, 8);
-    const suggestions = await groqSuggestUrls({ query, max: maxSites });
     const limit = pLimit(GROQ_MAX_CONCURRENCY());
     const allPoints: PricePoint[] = [];
-    const scrapeTasks = suggestions.map(s => limit(async () => {
+    let urls: string[] = [];
+    try {
+      const suggestions = await groqSuggestUrls({ query, max: maxSites });
+      urls = suggestions.map(s => s.url);
+      const scrapeTasks = suggestions.map(s => limit(async () => {
+        try {
+          const { series } = await scrapePricesFromUrl(s.url);
+          allPoints.push(...series);
+        } catch {
+          // ignore individual failures
+        }
+      }));
+      await Promise.all(scrapeTasks);
+    } catch {
+      // ignore discovery failures; we will fallback
+    }
+    // Fallback to LLM-extracted series if scraping produced too few points
+    if (allPoints.length < 3) {
       try {
-        const { series } = await scrapePricesFromUrl(s.url);
-        allPoints.push(...series);
+        const llm = await groqExtractSeries({ query });
+        for (const p of llm.series) {
+          allPoints.push({
+            date: p.date,
+            price: p.price,
+            currency: p.currency,
+            sourceUrl: p.sourceUrl ?? "llm://groq",
+            title: "LLM-extracted",
+            snippet: undefined
+          });
+        }
+        if (llm.sources?.length) {
+          urls = Array.from(new Set([...urls, ...llm.sources.map(s => s.url)]));
+        }
       } catch {
-        // ignore individual failures
+        // still return whatever we have
       }
-    }));
-    await Promise.all(scrapeTasks);
-
+    }
     const trend: TrendResult = buildTrend(allPoints);
     return {
-      content: [{ type: "text", text: "price_trend_search completed" }],
-      structuredContent: trend
+      content: [{ type: "text", text: `price_trend_search completed (urls=${urls.length}, points=${trend.series.length})` }],
+      structuredContent: { ...trend, sources: trend.sources.length ? trend.sources : urls.map(u => ({ url: u })) }
     };
   }
 );
@@ -192,7 +218,6 @@ void (async () => {
       }
     });
     server.listen(port, () => {
-      // eslint-disable-next-line no-console
       console.log(`MCP Streamable HTTP server listening on :${port}`);
     });
   } else {

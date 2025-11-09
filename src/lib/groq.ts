@@ -133,3 +133,51 @@ export async function groqAnalyzeSentiment(params: {
   return parsed;
 }
 
+export type GroqSeriesPoint = { date: string; price: number; currency?: string; sourceUrl?: string };
+export type GroqSeries = { series: GroqSeriesPoint[]; currency?: string; sources?: Array<{ url: string; title?: string }> };
+
+export async function groqExtractSeries(params: { query: string }): Promise<GroqSeries> {
+  const apiKey = getEnv("GROQ_API_KEY");
+  const modelPrimary = process.env.GROQ_MODEL ?? "llama-3.1-8b-instant";
+  const modelFallback = "openai/gpt-oss-20b";
+  const system = [
+    "Extract a concise historical price series for the given product/topic.",
+    "Return strictly JSON with shape: {\"series\":[{\"date\":\"YYYY-MM-DD\",\"price\":number,\"currency\":\"USD\"}],\"currency\":\"USD\",\"sources\":[{\"url\":\"...\",\"title\":\"...\"}]}",
+    "Prefer year granularity; dates can be YYYY-01-01.",
+    "Include 3-6 sources (non-paywalled if possible)."
+  ].join(" ");
+  const user = `Topic: ${params.query}\nReturn 3-8 points spanning multiple years if possible.`;
+  async function callModel(model: string): Promise<GroqChatResponse> {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "User-Agent": USER_AGENT()
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user }
+        ],
+        temperature: 0.2,
+        response_format: { type: "json_object" }
+      })
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      if (/decommissioned|no longer supported|invalid model/i.test(body) && model !== modelFallback) {
+        return await callModel(modelFallback);
+      }
+      throw new Error(`Groq API error: ${res.status} ${res.statusText} ${body}`);
+    }
+    return (await res.json()) as GroqChatResponse;
+  }
+  const data = await callModel(modelPrimary);
+  const content = data.choices?.[0]?.message?.content ?? "{}";
+  const parsed = JSON.parse(content) as GroqSeries;
+  parsed.series = Array.isArray(parsed.series) ? parsed.series.filter(p => Number.isFinite(p.price)) : [];
+  return parsed;
+}
+
